@@ -1,5 +1,7 @@
 import orchestrator from "tests/orchestrator.js";
 import { version as uuidVersion } from "uuid";
+import user from "models/user.js";
+import password from "models/password.js";
 
 beforeAll(async () => {
   await orchestrator.waitForAllServices();
@@ -17,7 +19,7 @@ describe("POST /api/v1/users", () => {
         },
         body: JSON.stringify({
           username: "dfloriani",
-          email: "kinfloriani@gmail.com",
+          email: "kinfloriani@test.com",
           password: "pass123456",
         }),
       });
@@ -28,8 +30,8 @@ describe("POST /api/v1/users", () => {
       expect(responseBody).toEqual({
         id: responseBody.id,
         username: "dfloriani",
-        email: "kinfloriani@gmail.com",
-        password: "pass123456",
+        email: "kinfloriani@test.com",
+        password: responseBody.password,
         created_at: responseBody.created_at,
         updated_at: responseBody.updated_at,
       });
@@ -37,6 +39,20 @@ describe("POST /api/v1/users", () => {
       expect(uuidVersion(responseBody.id)).toBe(4);
       expect(Date.parse(responseBody.created_at)).not.toBeNaN();
       expect(Date.parse(responseBody.updated_at)).not.toBeNaN();
+
+      const userInDatabase = await user.findOneByUsername("dfloriani");
+      const correctPasswordMatch = await password.compare(
+        "pass123456",
+        userInDatabase.password,
+      );
+
+      const incorrectPasswordMatch = await password.compare(
+        "wrongPassword",
+        userInDatabase.password,
+      );
+
+      expect(correctPasswordMatch).toBe(true);
+      expect(incorrectPasswordMatch).toBe(false);
     });
 
     test("With duplicated 'email'", async () => {
@@ -47,7 +63,7 @@ describe("POST /api/v1/users", () => {
         },
         body: JSON.stringify({
           username: "duplicatedemail1",
-          email: "duplicated@gmail.com",
+          email: "duplicated@test.com",
           password: "pass123456",
         }),
       });
@@ -60,7 +76,7 @@ describe("POST /api/v1/users", () => {
         },
         body: JSON.stringify({
           username: "duplicatedemail2",
-          email: "Duplicated@gmail.com",
+          email: "Duplicated@test.com",
           password: "pass123456",
         }),
       });
@@ -83,7 +99,7 @@ describe("POST /api/v1/users", () => {
         },
         body: JSON.stringify({
           username: "duplicatedusername",
-          email: "duplicatedusername1@gmail.com",
+          email: "duplicatedusername1@test.com",
           password: "pass123456",
         }),
       });
@@ -96,7 +112,7 @@ describe("POST /api/v1/users", () => {
         },
         body: JSON.stringify({
           username: "DuplicatedUsername",
-          email: "duplicatedusername2@gmail.com",
+          email: "duplicatedusername2@test.com",
           password: "pass123456",
         }),
       });
