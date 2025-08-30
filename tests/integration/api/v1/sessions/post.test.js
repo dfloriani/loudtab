@@ -135,7 +135,7 @@ describe("POST /api/v1/sessions", () => {
       createdAt.setMilliseconds(0);
 
       // Check that the expiration date is 30 days after the creation date
-      expect(expiresAt - createdAt).toBe(session.EXPIRATION_IN_MILISECONDS);
+      expect(expiresAt - createdAt).toBe(session.EXPIRATION_IN_MILLISECONDS);
 
       const parsedSetCookie = setCookieParser(response, {
         map: true,
@@ -144,7 +144,7 @@ describe("POST /api/v1/sessions", () => {
       expect(parsedSetCookie.session_id).toEqual({
         name: "session_id",
         value: responseBody.token,
-        maxAge: session.EXPIRATION_IN_MILISECONDS / 1000, // Convert milliseconds to seconds
+        maxAge: session.EXPIRATION_IN_MILLISECONDS / 1000, // Convert milliseconds to seconds
         path: "/",
         httpOnly: true,
       });
