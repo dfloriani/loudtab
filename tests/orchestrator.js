@@ -73,6 +73,11 @@ async function getLastEmail() {
   const response = await fetch(`${emailHttpUrl}/messages`);
   const emails = await response.json();
   const lastEmail = emails[emails.length - 1];
+
+  if (!lastEmail) {
+    return null;
+  }
+
   const emailTextResponse = await fetch(
     `${emailHttpUrl}/messages/${lastEmail.id}.plain`,
   );
