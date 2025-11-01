@@ -1,3 +1,4 @@
+import webserver from "infra/webserver";
 import activation from "models/activation";
 import orchestrator from "tests/orchestrator";
 
@@ -45,15 +46,22 @@ describe("Use case: registration flow (all successful)", () => {
   test("Receive activation email", async () => {
     const lastEmail = await orchestrator.getLastEmail();
 
-    const activationToken = await activation.findOneByUserId(
-      createUserResponseBody.id,
-    );
-
     expect(lastEmail.sender).toBe("<contact@loudtab.com.br>");
     expect(lastEmail.recipients[0]).toBe("<regflow@test.com>");
     expect(lastEmail.subject).toBe("Activate your Loudtab account");
     expect(lastEmail.text).toContain("registrationflow");
-    expect(lastEmail.text).toContain(activationToken.id);
+
+    const activationTokenId = orchestrator.extractUUID(lastEmail.text);
+
+    expect(lastEmail.text).toContain(
+      `${webserver.origin}/signup/activate?token=${activationTokenId}`,
+    );
+
+    const activationTokenObject =
+      await activation.findOneValidById(activationTokenId);
+
+    expect(activationTokenObject.user_id).toBe(createUserResponseBody.id);
+    expect(activationTokenObject.used_at).toBe(null);
   });
 
   test("Activate account", async () => {});

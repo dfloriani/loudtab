@@ -1,5 +1,6 @@
 import database from "infra/database";
 import email from "infra/email";
+import { NotFoundError } from "infra/errors";
 import webserver from "infra/webserver";
 
 const EXPIRATION_IN_MILLISECONDS = 60 * 15 * 1000; // 15 minutes
@@ -44,29 +45,42 @@ The Loudtab Team`,
   });
 }
 
-async function findOneByUserId(userId) {
-  const results = await database.query({
-    text: `
+async function findOneValidById(activationTokenId) {
+  const activationTokenObject = await runSelectQuery(activationTokenId);
+
+  return activationTokenObject;
+
+  async function runSelectQuery(activationTokenId) {
+    const results = await database.query({
+      text: `
       SELECT
         *
       FROM
         user_activation_tokens
       WHERE
-        user_id = $1
-      ORDER BY
-        created_at DESC
+        id = $1
+        AND used_at IS NULL
+        AND expires_at > NOW()
       LIMIT 1
       ;`,
-    values: [userId],
-  });
+      values: [activationTokenId],
+    });
 
-  return results.rows[0];
+    if (results.rowCount === 0) {
+      throw new NotFoundError({
+        message: "Activation token not found or expired",
+        action: "Register again to receive a new activation email",
+      });
+    }
+
+    return results.rows[0];
+  }
 }
 
 const activation = {
   sendEmailToUser,
   create,
-  findOneByUserId,
+  findOneValidById,
 };
 
 export default activation;
