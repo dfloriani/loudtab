@@ -1,0 +1,122 @@
+import webserver from "infra/webserver";
+import activation from "models/activation";
+import user from "models/user";
+import orchestrator from "tests/orchestrator";
+
+beforeAll(async () => {
+  await orchestrator.waitForAllServices();
+  await orchestrator.clearDatabase();
+  await orchestrator.runPendingMigrations();
+  await orchestrator.deleteAllEmails();
+});
+
+describe("Use case: registration flow (all successful)", () => {
+  let createUserResponseBody;
+  let activationTokenId;
+  let createSessionResponseBody;
+
+  test("Create user account", async () => {
+    const createUserResponse = await fetch(
+      "http://localhost:3000/api/v1/users",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: "registrationflow",
+          email: "regflow@test.com",
+          password: "pass123456",
+        }),
+      },
+    );
+
+    expect(createUserResponse.status).toBe(201);
+
+    createUserResponseBody = await createUserResponse.json();
+
+    expect(createUserResponseBody).toEqual({
+      id: createUserResponseBody.id,
+      username: "registrationflow",
+      email: "regflow@test.com",
+      password: createUserResponseBody.password,
+      features: ["read:activation_token"],
+      created_at: createUserResponseBody.created_at,
+      updated_at: createUserResponseBody.updated_at,
+    });
+  });
+
+  test("Receive activation email", async () => {
+    const lastEmail = await orchestrator.getLastEmail();
+
+    expect(lastEmail.sender).toBe("<contact@loudtab.com.br>");
+    expect(lastEmail.recipients[0]).toBe("<regflow@test.com>");
+    expect(lastEmail.subject).toBe("Activate your Loudtab account");
+    expect(lastEmail.text).toContain("registrationflow");
+
+    activationTokenId = orchestrator.extractUUID(lastEmail.text);
+
+    expect(lastEmail.text).toContain(
+      `${webserver.origin}/signup/activate?token=${activationTokenId}`,
+    );
+
+    const activationTokenObject =
+      await activation.findOneValidById(activationTokenId);
+
+    expect(activationTokenObject.user_id).toBe(createUserResponseBody.id);
+    expect(activationTokenObject.used_at).toBe(null);
+  });
+
+  test("Activate account", async () => {
+    const activationResponse = await fetch(
+      `http://localhost:3000/api/v1/activations/${activationTokenId}`,
+      {
+        method: "PATCH",
+      },
+    );
+
+    expect(activationResponse.status).toBe(200);
+
+    const activationResponseBody = await activationResponse.json();
+
+    expect(Date.parse(activationResponseBody.used_at)).not.toBeNaN();
+
+    const activatedUser = await user.findOneByUsername("registrationflow");
+    expect(activatedUser.features).toEqual(["create:session", "read:session"]);
+  });
+
+  test("Login with activated account", async () => {
+    const createSessionResponse = await fetch(
+      "http://localhost:3000/api/v1/sessions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "regflow@test.com",
+          password: "pass123456",
+        }),
+      },
+    );
+
+    expect(createSessionResponse.status).toBe(201);
+
+    createSessionResponseBody = await createSessionResponse.json();
+
+    expect(createSessionResponseBody.user_id).toBe(createUserResponseBody.id);
+  });
+
+  test("Get user information", async () => {
+    const userResponse = await fetch("http://localhost:3000/api/v1/user", {
+      headers: {
+        cookie: `session_id=${createSessionResponseBody.token}`,
+      },
+    });
+
+    expect(userResponse.status).toBe(200);
+
+    const userResponseBody = await userResponse.json();
+    expect(userResponseBody.id).toBe(createUserResponseBody.id);
+  });
+});
